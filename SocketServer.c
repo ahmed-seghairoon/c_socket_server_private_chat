@@ -54,9 +54,33 @@ int main(){
     int clientAddressSize = sizeof(clientAddress);
     int clientSocketFD = accept(serverSocketFD, (SOCKADDR *) &clientAddress, &clientAddressSize);
 
+
     char buffer[1024];
-    recv(clientSocketFD, buffer, 1024, 0);
-    printf("Response was %s\n", buffer);
+    // keep reciving messages from clients
+    while (1)
+    {
+        
+        SSIZE_T amountRecived = recv(clientSocketFD, buffer, 1024, 0);
+        if (amountRecived > 0)
+        {
+            buffer[amountRecived] = 0;
+            printf("Response was %s", buffer);
+        }
+        
+        // if recived amount is zero there is an error or the client closed the connection
+        //break from the loop then shutdown the server
+        if (amountRecived == 0)
+            break;
+        
+        
+       
+    }
+    
+
+    closesocket(clientSocketFD);
+    // shut down the server with option 2 shut down receive and send
+    shutdown(serverSocketFD, 2);
+   
     
     return 0;
 }
