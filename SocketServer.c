@@ -10,80 +10,13 @@
 
 #pragma comment(lib, "ws2_32.lib")
 
-void wslInit();
-int createTCPIpv4Socket();
-struct sockaddr_in* CreateIPv4Address(char* ip, int port);
 
-int main(){
-
-    wslInit();
-
-    int serverSocketFD = createTCPIpv4Socket();
-    struct sockaddr_in* serverAddress = CreateIPv4Address("127.0.0.1", 2000);
-
-
-    /*
-        bind function will bind the proccess to the port from the operating system
-        will return result if its zero that means it wass successful else not successful
-    */ 
-    int result = bind(serverSocketFD, (SOCKADDR *) serverAddress, sizeof(*serverAddress));
-
-    if (result == 0)
-        printf("socket was bound successfully\n");
-    else{
-        printf("socket was not bound successfully\n");
-        exit(1);
-    }
-
-    
-    /*
-        start listening to incoming sockets requests
-        10 is the number of backlog (socket requests queues)
-        it will return a result too
-    */
-    int listenResult = listen(serverSocketFD, 10);
-
-    if (result == 0)
-        printf("listening was successfully\n");
-    else{
-        printf("listening was not bound successfully\n");
-        exit(1);
-    }
-
-    struct sockaddr_in clientAddress;
-    int clientAddressSize = sizeof(clientAddress);
-    int clientSocketFD = accept(serverSocketFD, (SOCKADDR *) &clientAddress, &clientAddressSize);
-
-
-    char buffer[1024];
-    // keep reciving messages from clients
-    while (1)
-    {
-        
-        SSIZE_T amountRecived = recv(clientSocketFD, buffer, 1024, 0);
-        if (amountRecived > 0)
-        {
-            buffer[amountRecived] = 0;
-            printf("Response was %s", buffer);
-        }
-        
-        // if recived amount is zero there is an error or the client closed the connection
-        //break from the loop then shutdown the server
-        if (amountRecived == 0)
-            break;
-        
-        
-       
-    }
-    
-
-    closesocket(clientSocketFD);
-    // shut down the server with option 2 shut down receive and send
-    shutdown(serverSocketFD, 2);
-   
-    
-    return 0;
-}
+typedef struct {
+    int AcceptedSocketFD;
+    struct sockaddr_in address;
+    int error;
+    int acceptedSuccessfully;
+}AcceptedSocket;
 
 // reusable function used to initialize the Windows Sockets library
 void wslInit(){
@@ -126,8 +59,105 @@ struct sockaddr_in* CreateIPv4Address(char* ip, int port){
     return address;
 }
 
+
+AcceptedSocket * acceptIncomingConnection(int serverSocketFD){
+    struct sockaddr_in clientAddress;
+    int clientAddressSize = sizeof(clientAddress);
+    int clientSocketFD = accept(serverSocketFD, (SOCKADDR *) &clientAddress, &clientAddressSize);
+
+    AcceptedSocket * acceptedSocket = (AcceptedSocket*)malloc(sizeof(AcceptedSocket));
+    acceptedSocket->address = clientAddress;
+    acceptedSocket->AcceptedSocketFD = clientSocketFD;
+
+    // if accept function returns zero or less that means there was an error
+    acceptedSocket->acceptedSuccessfully = clientSocketFD > 0;
+
+    // if its not accepted successfully we will store the error
+    if (!acceptedSocket->acceptedSuccessfully)
+        acceptedSocket->error = clientSocketFD;
+    
+
+    return acceptedSocket;
+}
+
+void receiveAndPrintIncommingMessages(int socketFD){
+    char buffer[1024];
+    // keep reciving messages from clients
+    while (1)
+    {
+        
+        SSIZE_T amountRecived = recv(socketFD, buffer, 1024, 0);
+        if (amountRecived > 0)
+        {
+            buffer[amountRecived] = 0;
+            printf("Response was %s", buffer);
+        }
+        
+        // if recived amount is zero there is an error or the client closed the connection
+        //break from the loop then shutdown the server
+        if (amountRecived == 0)
+            break;
+        
+        
+       
+    }
+}
+
+int main(){
+
+    wslInit();
+
+    int serverSocketFD = createTCPIpv4Socket();
+    struct sockaddr_in* serverAddress = CreateIPv4Address("127.0.0.1", 2000);
+
+
+    /*
+        bind function will bind the proccess to the port from the operating system
+        will return result if its zero that means it wass successful else not successful
+    */ 
+    int result = bind(serverSocketFD, (SOCKADDR *) serverAddress, sizeof(*serverAddress));
+
+    if (result == 0)
+        printf("socket was bound successfully\n");
+    else{
+        printf("socket was not bound successfully\n");
+        exit(1);
+    }
+
+    
+    /*
+        start listening to incoming sockets requests
+        10 is the number of backlog (socket requests queues)
+        it will return a result too
+    */
+    int listenResult = listen(serverSocketFD, 10);
+
+    if (result == 0)
+        printf("listening was successfully\n");
+    else{
+        printf("listening was not bound successfully\n");
+        exit(1);
+    }
+
+    AcceptedSocket *clientSocket = acceptIncomingConnection(serverSocketFD);
+
+
+    receiveAndPrintIncommingMessages(clientSocket->AcceptedSocketFD);
+    
+
+    closesocket(clientSocket->AcceptedSocketFD);
+    // shut down the server with option 2 shut down receive and send
+    shutdown(serverSocketFD, 2);
+   
+    
+    return 0;
+}
+
+
+
 /*
     use command  
     "gcc SocketServer.c -o socketserver -lws2_32" 
     to compile 
 */
+
