@@ -80,7 +80,9 @@ AcceptedSocket * acceptIncomingConnection(int serverSocketFD){
     return acceptedSocket;
 }
 
-void receiveAndPrintIncommingMessages(int socketFD){
+
+DWORD WINAPI receiveAndPrintIncommingMessages(LPVOID lpParameter){
+    int socketFD = *(int *)lpParameter;
     char buffer[1024];
     // keep reciving messages from clients
     while (1)
@@ -98,8 +100,21 @@ void receiveAndPrintIncommingMessages(int socketFD){
         if (amountRecived == 0)
             break;
         
-        
-       
+    }
+    closesocket(socketFD);
+}
+
+void receiveAndPrintIncommingMessagesOnASeperateThread(AcceptedSocket *clientSocket ){
+
+    HANDLE thread = CreateThread(NULL, 0, receiveAndPrintIncommingMessages, 
+                                    (LPVOID)&clientSocket->AcceptedSocketFD, 0, NULL);
+}
+
+void startAcceptingIncomingConnections(int serverSocketFD){
+    while (1)
+    {
+        AcceptedSocket * clientSocket = acceptIncomingConnection(serverSocketFD);
+        receiveAndPrintIncommingMessagesOnASeperateThread(clientSocket);
     }
 }
 
@@ -124,7 +139,6 @@ int main(){
         exit(1);
     }
 
-    
     /*
         start listening to incoming sockets requests
         10 is the number of backlog (socket requests queues)
@@ -132,20 +146,15 @@ int main(){
     */
     int listenResult = listen(serverSocketFD, 10);
 
-    if (result == 0)
+    if (listenResult == 0)
         printf("listening was successfully\n");
     else{
         printf("listening was not bound successfully\n");
         exit(1);
     }
 
-    AcceptedSocket *clientSocket = acceptIncomingConnection(serverSocketFD);
-
-
-    receiveAndPrintIncommingMessages(clientSocket->AcceptedSocketFD);
+    startAcceptingIncomingConnections(serverSocketFD);
     
-
-    closesocket(clientSocket->AcceptedSocketFD);
     // shut down the server with option 2 shut down receive and send
     shutdown(serverSocketFD, 2);
    
