@@ -18,6 +18,9 @@ typedef struct {
     int acceptedSuccessfully;
 }AcceptedSocket;
 
+AcceptedSocket acceptedSockets[10];
+int acceptSocketCount = 0;
+
 // reusable function used to initialize the Windows Sockets library
 void wslInit(){
     // WSAStartup function is used to initialize the Windows Sockets library
@@ -81,6 +84,18 @@ AcceptedSocket * acceptIncomingConnection(int serverSocketFD){
 }
 
 
+void sendRecivedMessageToOtherClients(int socketFD,char *buffer){
+
+
+    for (int i = 0; i < acceptSocketCount; i++)
+        if (acceptedSockets[i].AcceptedSocketFD != socketFD)
+        {
+            send(acceptedSockets[i].AcceptedSocketFD, buffer, strlen(buffer), 0);
+        }
+        
+
+}
+
 DWORD WINAPI receiveAndPrintIncommingMessages(LPVOID lpParameter){
     int socketFD = *(int *)lpParameter;
     char buffer[1024];
@@ -93,6 +108,8 @@ DWORD WINAPI receiveAndPrintIncommingMessages(LPVOID lpParameter){
         {
             buffer[amountRecived] = 0;
             printf("Response was %s", buffer);
+
+            sendRecivedMessageToOtherClients(socketFD,buffer);
         }
         
         // if recived amount is zero there is an error or the client closed the connection
@@ -114,6 +131,7 @@ void startAcceptingIncomingConnections(int serverSocketFD){
     while (1)
     {
         AcceptedSocket * clientSocket = acceptIncomingConnection(serverSocketFD);
+        acceptedSockets[acceptSocketCount++] = *clientSocket;
         receiveAndPrintIncommingMessagesOnASeperateThread(clientSocket);
     }
 }
