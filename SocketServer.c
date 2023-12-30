@@ -107,7 +107,7 @@ DWORD WINAPI receiveAndPrintIncommingMessages(LPVOID lpParameter){
         if (amountRecived > 0)
         {
             buffer[amountRecived] = 0;
-            printf("Response was %s", buffer);
+            printf("%s\n", buffer);
 
             sendRecivedMessageToOtherClients(socketFD,buffer);
         }
