@@ -183,21 +183,60 @@ AcceptedSocket * acceptIncomingConnection(int serverSocketFD){
 }
 
 
+char *trimwhitespace(char *str)
+{
+  char *end;
+
+  while(isspace((unsigned char)*str)) str++;
+
+  if(*str == 0)
+    return str;
+
+  end = str + strlen(str) - 1;
+  while(end > str && isspace((unsigned char)*end)) end--;
+
+  end[1] = '\0';
+
+  return str;
+}
+
+
 void sendRecivedMessageToOtherClients(AcceptedSocket *sender,char *buffer){
 
+   
+    char *recepientName = strtok(buffer, ">");
+    char *context = strtok(NULL, ">");
 
+    recepientName = trimwhitespace(recepientName);
+    context = trimwhitespace(context);
 
     Node* temp = clientsHead;
     
     char message[2048];
 
-    sprintf(message, "%s: %s",sender->username ,buffer);
+    sprintf(message, "%s: %s",sender->username ,context);
+
+    int userfound = 0;
 
     while (temp != NULL)
     {
-        send(temp->data->AcceptedSocketFD, buffer, strlen(buffer), 0);
+        if (strcmp(temp->data->username, recepientName) == 0){
+            int sendResults = send(temp->data->AcceptedSocketFD, message, strlen(message), 0);
+            if (sendResults != -1)
+                send(sender->AcceptedSocketFD, "200 - message sent successfuly", strlen("200 - message sent successfuly"), 0);
+            else if (sendResults != strlen(message)){
+                send(sender->AcceptedSocketFD, "499 - client closed the connection ungracefully", strlen("499 - client closed the connection ungracefully"), 0);
+            }
+            userfound = 1;
+        }
         temp = temp->next;
     }
+
+    if (userfound == 0)
+    {
+        send(sender->AcceptedSocketFD, "404 - user not found", strlen("404 - user not found"), 0);
+    }
+    
 
 }
 
