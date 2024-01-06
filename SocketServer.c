@@ -16,10 +16,109 @@ typedef struct {
     struct sockaddr_in address;
     int error;
     int acceptedSuccessfully;
+    char *username;
 }AcceptedSocket;
 
-AcceptedSocket acceptedSockets[10];
-int acceptSocketCount = 0;
+
+struct Node
+{
+    AcceptedSocket *data;
+    struct Node *next;
+};
+
+typedef struct Node Node;
+
+Node *clientsHead = NULL;
+
+Node* addFirst(Node *head, AcceptedSocket *data){
+    Node *newNode = (Node*) malloc(sizeof(Node));
+    newNode->data = data;
+
+    if (!head){
+        newNode->next = NULL;
+        return newNode;
+    }
+
+    newNode->next = head;
+    
+    return newNode;
+}
+
+Node* addLast(Node *head, AcceptedSocket *data){
+    Node *newNode = (Node*) malloc(sizeof(Node));
+    newNode->data = data;
+    newNode->next = NULL;
+
+    if (!head)
+        return newNode;
+
+    Node *temp = (Node*) malloc(sizeof(Node));
+    temp = head;
+
+    while (temp->next)
+        temp = temp->next;
+
+    temp->next = newNode;
+
+    return head;
+}
+
+
+void printList(Node *head){
+    while (head)
+    {
+        printf("%d -> ", head->data->AcceptedSocketFD);
+        head = head->next;
+    }
+
+    printf("\n");
+}
+
+
+Node *deleteNode(Node *head, int socketFD){
+
+    if (!head)
+        return head;    
+
+    if (head->data->AcceptedSocketFD == socketFD)
+    {
+        Node *temp = head->next;
+        free(head);
+        head = temp;
+        return head;
+    }
+    
+    Node* traverse = head;
+
+    while (traverse->next)
+    {
+        if (traverse->next->data->AcceptedSocketFD == socketFD)
+        {
+            Node *temp = traverse->next->next;
+            free(traverse->next);
+            traverse->next = temp;
+            return head;
+        }
+
+        traverse = traverse->next;
+    }
+}
+
+
+int listSize(Node *head){
+    int count = 0;
+
+    while (head)
+    {
+        count++;
+        head = head->next;
+    }
+
+    return count;
+}
+
+
+
 
 // reusable function used to initialize the Windows Sockets library
 void wslInit(){
@@ -84,32 +183,145 @@ AcceptedSocket * acceptIncomingConnection(int serverSocketFD){
 }
 
 
-void sendRecivedMessageToOtherClients(int socketFD,char *buffer){
+void sendRecivedMessageToOtherClients(AcceptedSocket *sender,char *buffer){
 
 
-    for (int i = 0; i < acceptSocketCount; i++)
-        if (acceptedSockets[i].AcceptedSocketFD != socketFD)
-        {
-            send(acceptedSockets[i].AcceptedSocketFD, buffer, strlen(buffer), 0);
-        }
-        
+
+    Node* temp = clientsHead;
+    
+    char message[2048];
+
+    sprintf(message, "%s: %s",sender->username ,buffer);
+
+    while (temp != NULL)
+    {
+        send(temp->data->AcceptedSocketFD, buffer, strlen(buffer), 0);
+        temp = temp->next;
+    }
 
 }
 
+void setUsername(char *username, int clientSocketFD){
+    Node* temp = clientsHead;
+    username = username + 9;
+    
+    while (temp != NULL)
+    {
+        if (temp->data->AcceptedSocketFD == clientSocketFD){
+            temp->data->username = (char*)malloc(sizeof(char) * 1024);
+            strcpy(temp->data->username, username);
+        }
+        
+        temp = temp->next;
+    }
+}
+
+
+DWORD WINAPI sendClientList(LPVOID lpParameter){
+
+    AcceptedSocket *sender = (AcceptedSocket *)lpParameter;
+
+    Node* temp = clientsHead;
+    char joinedMessage[2048];
+    sprintf(joinedMessage, "%s connected to the server", sender->username);
+
+
+    while (temp != NULL)
+    {
+        if (temp->data->AcceptedSocketFD != sender->AcceptedSocketFD)
+        {
+            send(temp->data->AcceptedSocketFD, joinedMessage, strlen(joinedMessage), 0);
+        }
+        temp = temp->next;
+    }
+    
+    temp = clientsHead;
+    char message[10000] = "connected users list:\n_______________________";
+
+    while (temp != NULL)
+    {
+        sprintf(message, "%s\n%s", message,temp->data->username);
+        temp = temp->next;
+    }
+
+    sprintf(message, "%s\n%s", message,"_______________________\n");
+
+    temp = clientsHead;
+
+    while (temp != NULL)
+    {
+        send(temp->data->AcceptedSocketFD, message, strlen(message), 0);
+        temp = temp->next;
+    }
+}
+
+void sendClientListOnANewThread(AcceptedSocket *clientSocket){
+    HANDLE thread = CreateThread(NULL, 0, sendClientList, (LPVOID)clientSocket, 0, NULL);
+}
+
+
+void dissconnectUser(AcceptedSocket *client){
+
+    Node* temp = clientsHead;
+    char dissconnectMessage[2048];
+    sprintf(dissconnectMessage, "%s dissconnected from the server", client->username);
+
+    clientsHead = deleteNode(clientsHead, client->AcceptedSocketFD);
+    closesocket(client->AcceptedSocketFD);
+
+
+    while (temp != NULL)
+    {
+        if (temp->data->AcceptedSocketFD != client->AcceptedSocketFD)
+        {
+            send(temp->data->AcceptedSocketFD, dissconnectMessage, strlen(dissconnectMessage), 0);
+        }
+        temp = temp->next;
+    }
+    
+    temp = clientsHead;
+    char message[10000] = "connected users list:\n_______________________";
+
+    while (temp != NULL)
+    {
+        sprintf(message, "%s\n%s", message,temp->data->username);
+        temp = temp->next;
+    }
+
+    sprintf(message, "%s\n%s", message,"_______________________\n");
+
+    temp = clientsHead;
+
+    while (temp != NULL)
+    {
+        send(temp->data->AcceptedSocketFD, message, strlen(message), 0);
+        temp = temp->next;
+    }
+}
+
 DWORD WINAPI receiveAndPrintIncommingMessages(LPVOID lpParameter){
-    int socketFD = *(int *)lpParameter;
+    AcceptedSocket *sender = (AcceptedSocket *)lpParameter;
     char buffer[1024];
     // keep reciving messages from clients
     while (1)
     {
         
-        SSIZE_T amountRecived = recv(socketFD, buffer, 1024, 0);
+        SSIZE_T amountRecived = recv(sender->AcceptedSocketFD, buffer, 1024, 0);
+
         if (amountRecived > 0)
         {
             buffer[amountRecived] = 0;
             printf("%s\n", buffer);
 
-            sendRecivedMessageToOtherClients(socketFD,buffer);
+            if (strstr(buffer, "/setname:") != NULL) {
+                setUsername(buffer, sender->AcceptedSocketFD);
+                sendClientListOnANewThread(sender);
+            }
+            else if (strstr(buffer, "/exit:") != NULL) {
+                dissconnectUser(sender);
+            }else{
+                sendRecivedMessageToOtherClients(sender,buffer);
+            }
         }
         
         // if recived amount is zero there is an error or the client closed the connection
@@ -118,20 +330,22 @@ DWORD WINAPI receiveAndPrintIncommingMessages(LPVOID lpParameter){
             break;
         
     }
-    closesocket(socketFD);
+    
+    dissconnectUser(sender);
 }
 
 void receiveAndPrintIncommingMessagesOnASeperateThread(AcceptedSocket *clientSocket ){
 
     HANDLE thread = CreateThread(NULL, 0, receiveAndPrintIncommingMessages, 
-                                    (LPVOID)&clientSocket->AcceptedSocketFD, 0, NULL);
+                                    (LPVOID)clientSocket, 0, NULL);
 }
+
 
 void startAcceptingIncomingConnections(int serverSocketFD){
     while (1)
     {
         AcceptedSocket * clientSocket = acceptIncomingConnection(serverSocketFD);
-        acceptedSockets[acceptSocketCount++] = *clientSocket;
+        clientsHead = addLast(clientsHead, clientSocket);
         receiveAndPrintIncommingMessagesOnASeperateThread(clientSocket);
     }
 }
