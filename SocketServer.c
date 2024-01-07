@@ -218,14 +218,21 @@ void sendRecivedMessageToOtherClients(AcceptedSocket *sender,char *buffer){
 
     int userfound = 0;
 
+    char request[2048];
+
+    sprintf(request,"Request: from %s to %s: %s\n",sender->username, recepientName ,context);
+    printf(request);
+
     while (temp != NULL)
     {
         if (strcmp(temp->data->username, recepientName) == 0){
             int sendResults = send(temp->data->AcceptedSocketFD, message, strlen(message), 0);
-            if (sendResults != -1)
+            if (sendResults != -1){
                 send(sender->AcceptedSocketFD, "200 - message sent successfuly", strlen("200 - message sent successfuly"), 0);
-            else if (sendResults != strlen(message)){
+                printf("Response: 200 - message sent successfuly\n");
+            }else if (sendResults != strlen(message)){
                 send(sender->AcceptedSocketFD, "499 - client closed the connection ungracefully", strlen("499 - client closed the connection ungracefully"), 0);
+                printf("Response: 499 - client closed the connection ungracefully\n");
             }
             userfound = 1;
         }
@@ -235,6 +242,7 @@ void sendRecivedMessageToOtherClients(AcceptedSocket *sender,char *buffer){
     if (userfound == 0)
     {
         send(sender->AcceptedSocketFD, "404 - user not found", strlen("404 - user not found"), 0);
+        printf("Response: 404 - user not found\n");
     }
     
 
@@ -263,6 +271,7 @@ DWORD WINAPI sendClientList(LPVOID lpParameter){
     Node* temp = clientsHead;
     char joinedMessage[2048];
     sprintf(joinedMessage, "%s connected to the server", sender->username);
+    printf("%s\n",joinedMessage);
 
 
     while (temp != NULL)
@@ -292,6 +301,8 @@ DWORD WINAPI sendClientList(LPVOID lpParameter){
         send(temp->data->AcceptedSocketFD, message, strlen(message), 0);
         temp = temp->next;
     }
+
+    printf("%s",message);
 }
 
 void sendClientListOnANewThread(AcceptedSocket *clientSocket){
@@ -307,6 +318,8 @@ void dissconnectUser(AcceptedSocket *client){
 
     clientsHead = deleteNode(clientsHead, client->AcceptedSocketFD);
     closesocket(client->AcceptedSocketFD);
+
+    printf("%s\n",dissconnectMessage);
 
 
     while (temp != NULL)
@@ -336,6 +349,8 @@ void dissconnectUser(AcceptedSocket *client){
         send(temp->data->AcceptedSocketFD, message, strlen(message), 0);
         temp = temp->next;
     }
+
+    printf("%s",message);
 }
 
 DWORD WINAPI receiveAndPrintIncommingMessages(LPVOID lpParameter){
@@ -350,13 +365,14 @@ DWORD WINAPI receiveAndPrintIncommingMessages(LPVOID lpParameter){
         if (amountRecived > 0)
         {
             buffer[amountRecived] = 0;
-            printf("%s\n", buffer);
 
             if (strstr(buffer, "/setname:") != NULL) {
+                printf("%s\n", buffer);
                 setUsername(buffer, sender->AcceptedSocketFD);
                 sendClientListOnANewThread(sender);
             }
             else if (strstr(buffer, "/exit:") != NULL) {
+                printf("%s\n", buffer);
                 dissconnectUser(sender);
             }else{
                 sendRecivedMessageToOtherClients(sender,buffer);
@@ -418,7 +434,7 @@ int main(){
     int listenResult = listen(serverSocketFD, 10);
 
     if (listenResult == 0)
-        printf("listening was successfully\n");
+        printf("listening\n");
     else{
         printf("listening was not bound successfully\n");
         exit(1);
