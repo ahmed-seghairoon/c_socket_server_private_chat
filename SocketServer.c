@@ -1,6 +1,8 @@
 #include<Windows.h>
 #include<stdio.h>
 #include<stdlib.h>
+#include <time.h>
+
 
 #ifndef UNICODE
 #define UNICODE
@@ -9,6 +11,19 @@
 #define WIN32_LEAN_AND_MEAN
 
 #pragma comment(lib, "ws2_32.lib")
+
+
+FILE *filePtr;
+
+
+void writeLog(char *message){
+
+    time_t now = time(NULL);
+
+    char *ctime_no_newline;
+    ctime_no_newline = strtok(ctime(&now), "\n");
+    fprintf(filePtr, "[%s] %s\n",ctime_no_newline, message);
+}
 
 
 typedef struct {
@@ -122,10 +137,12 @@ int listSize(Node *head){
 
 // reusable function used to initialize the Windows Sockets library
 void wslInit(){
+    writeLog("initializing wsl");
     // WSAStartup function is used to initialize the Windows Sockets library
     WSADATA wsaData;
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
         printf("WSAStartup failed\n");
+        writeLog("WSAStartup failed");
         exit(1);
     }
 }
@@ -144,6 +161,7 @@ int createTCPIpv4Socket(){
     if (socketFD == -1) {
         // WSAGetLastError() is used to retrieve the error code when a socket-related function fails.
         printf("Error creating socket. Error code: %d\n", WSAGetLastError());
+        writeLog("Error creating socket.");
         WSACleanup();
         return 1;
     }
@@ -222,6 +240,7 @@ void sendRecivedMessageToOtherClients(AcceptedSocket *sender,char *buffer){
 
     sprintf(request,"Request: from %s to %s: %s\n",sender->username, recepientName ,context);
     printf(request);
+    writeLog(request);
 
     while (temp != NULL)
     {
@@ -230,9 +249,11 @@ void sendRecivedMessageToOtherClients(AcceptedSocket *sender,char *buffer){
             if (sendResults != -1){
                 send(sender->AcceptedSocketFD, "200 - message sent successfuly", strlen("200 - message sent successfuly"), 0);
                 printf("Response: 200 - message sent successfuly\n");
+                writeLog("Response: 200 - message sent successfuly");
             }else if (sendResults != strlen(message)){
                 send(sender->AcceptedSocketFD, "499 - client closed the connection ungracefully", strlen("499 - client closed the connection ungracefully"), 0);
                 printf("Response: 499 - client closed the connection ungracefully\n");
+                writeLog("Response: 499 - client closed the connection ungracefully");
             }
             userfound = 1;
         }
@@ -243,6 +264,7 @@ void sendRecivedMessageToOtherClients(AcceptedSocket *sender,char *buffer){
     {
         send(sender->AcceptedSocketFD, "404 - user not found", strlen("404 - user not found"), 0);
         printf("Response: 404 - user not found\n");
+        writeLog("Response: 404 - user not found");
     }
     
 
@@ -272,6 +294,8 @@ DWORD WINAPI sendClientList(LPVOID lpParameter){
     char joinedMessage[2048];
     sprintf(joinedMessage, "%s connected to the server", sender->username);
     printf("%s\n",joinedMessage);
+
+    writeLog(joinedMessage);
 
 
     while (temp != NULL)
@@ -303,6 +327,7 @@ DWORD WINAPI sendClientList(LPVOID lpParameter){
     }
 
     printf("%s",message);
+    writeLog(message);
 }
 
 void sendClientListOnANewThread(AcceptedSocket *clientSocket){
@@ -320,7 +345,7 @@ void dissconnectUser(AcceptedSocket *client){
     closesocket(client->AcceptedSocketFD);
 
     printf("%s\n",dissconnectMessage);
-
+    writeLog(dissconnectMessage);
 
     while (temp != NULL)
     {
@@ -351,6 +376,8 @@ void dissconnectUser(AcceptedSocket *client){
     }
 
     printf("%s",message);
+    writeLog(message);
+
 }
 
 DWORD WINAPI receiveAndPrintIncommingMessages(LPVOID lpParameter){
@@ -368,11 +395,13 @@ DWORD WINAPI receiveAndPrintIncommingMessages(LPVOID lpParameter){
 
             if (strstr(buffer, "/setname:") != NULL) {
                 printf("%s\n", buffer);
+                writeLog(buffer);
                 setUsername(buffer, sender->AcceptedSocketFD);
                 sendClientListOnANewThread(sender);
             }
             else if (strstr(buffer, "/exit:") != NULL) {
                 printf("%s\n", buffer);
+                writeLog(buffer);
                 dissconnectUser(sender);
             }else{
                 sendRecivedMessageToOtherClients(sender,buffer);
@@ -407,6 +436,7 @@ void startAcceptingIncomingConnections(int serverSocketFD){
 
 int main(){
 
+    filePtr = fopen("logs.txt", "a");
     wslInit();
 
     int serverSocketFD = createTCPIpv4Socket();
@@ -419,10 +449,12 @@ int main(){
     */ 
     int result = bind(serverSocketFD, (SOCKADDR *) serverAddress, sizeof(*serverAddress));
 
-    if (result == 0)
+    if (result == 0){
         printf("socket was bound successfully\n");
-    else{
+        writeLog("socket was bound successfully");
+    }else{
         printf("socket was not bound successfully\n");
+        writeLog("socket was not bound successfully");
         exit(1);
     }
 
@@ -433,10 +465,14 @@ int main(){
     */
     int listenResult = listen(serverSocketFD, 10);
 
-    if (listenResult == 0)
+    if (listenResult == 0){
         printf("listening\n");
+        writeLog("listening");
+
+    }
     else{
         printf("listening was not bound successfully\n");
+        writeLog("listening was not bound successfully");
         exit(1);
     }
 
@@ -444,8 +480,8 @@ int main(){
     
     // shut down the server with option 2 shut down receive and send
     shutdown(serverSocketFD, 2);
-   
-    
+
+    fclose(filePtr);    
     return 0;
 }
 
